@@ -1,7 +1,8 @@
 # 이것은 각 상태들을 객체로 구현한 것임.
-import pico2d
+import random
+
 from pico2d import load_image, get_time
-from sdl2 import SDL_KEYDOWN, SDLK_SPACE, SDLK_RIGHT, SDL_KEYUP, SDLK_LEFT
+from sdl2 import SDL_KEYDOWN, SDLK_SPACE, SDLK_RIGHT, SDL_KEYUP, SDLK_LEFT, SDLK_a
 
 
 def space_down(e):
@@ -9,8 +10,10 @@ def space_down(e):
 
 
 def time_out_3(e):
-    return e[0] == 'TIME OUT' and e[1] > 3.0
+    return e[0] == 'TIME_OUT' # and e[1] > 3.0
 
+def time_out_5(e):
+    return e[0] == 'TIME_OUT_5'
 
 def right_down(e):
     return e[0] == 'INPUT' and e[1].type == SDL_KEYDOWN and e[1].key == SDLK_RIGHT
@@ -27,6 +30,11 @@ def left_down(e):
 def left_up(e):
     return e[0] == 'INPUT' and e[1].type == SDL_KEYUP and e[1].key == SDLK_LEFT
 
+def a_down(e):
+    return e[0] == 'INPUT' and e[1].type == SDL_KEYDOWN and e[1].key == SDLK_a
+
+
+
 
 class Sleep:
     @staticmethod
@@ -36,6 +44,7 @@ class Sleep:
 
     @staticmethod
     def exit(boy, e):
+        print("일어서기")
         pass
 
     @staticmethod
@@ -53,7 +62,6 @@ class Sleep:
                                           3.141592 / 2, '', boy.x - 25, boy.y - 25, 100, 100)
 
 
-
 class Idle:
     @staticmethod
     def enter(boy, e):
@@ -63,7 +71,7 @@ class Idle:
             boy.action = 3
         boy.dir = 0
         boy.frame = 0
-        boy.start_time = get_time() # pico2d import
+        boy.start_time = get_time()  # pico2d import
         print('Idle Enter')
         pass
 
@@ -75,7 +83,7 @@ class Idle:
     @staticmethod
     def do(boy):
         boy.frame = (boy.frame + 1) % 8
-        if get_time() - boy.start_time > 2:
+        if get_time() - boy.start_time > 3.0:
             boy.state_machine.handle_event(('TIME_OUT', 0))
         print('Idle do')
 
@@ -89,9 +97,10 @@ class StateMachine:
         self.boy = boy
         self.cur_state = Idle
         self.table = {
-            Idle: {right_down: Run, left_down: Run, left_up: Run, right_up: Run, time_out_3: Sleep},
+            Idle: {right_down: Run, left_down: Run, left_up: Run, right_up: Run, time_out_3: Sleep, a_down: AutoRun},
             Run: {right_down: Idle, left_down: Idle, right_up: Idle, left_up: Idle},
-            Sleep: {right_down: Run, left_down: Run, right_up: Run, left_up: Run, space_down: Idle}
+            Sleep: {right_down: Run, left_down: Run, right_up: Run, left_up: Run, space_down: Idle},
+            AutoRun: {time_out_5:Idle, right_down:Run, left_down:Run,}
         }
 
     def start(self):
@@ -103,14 +112,13 @@ class StateMachine:
     def draw(self):
         self.cur_state.draw(self.boy)
 
-    def handle_event(self, e): # 상태머신에게 보내준다
+    def handle_event(self, e):  # 상태머신에게 보내준다
         for check_event, next_state in self.table[self.cur_state].items():
             if check_event(e):
                 self.cur_state.exit(self.boy, e)
                 self.cur_state = next_state
                 self.cur_state.enter(self.boy, e)
                 return True  # 성공적으로 이벤트 변환
-
         return False  # 이벤트를 소모하지 못함
 
 
@@ -136,12 +144,11 @@ class Boy:
 
 
 class Run:
-
     @staticmethod
     def enter(boy, e):
-        if right_down(e) or left_up(e): # 오른쪽으로 RUN
+        if right_down(e) or left_up(e):  # 오른쪽으로 RUN
             boy.dir, boy.action = 1, 1
-        elif left_down(e) or right_up(e): # 왼쪽으로 RUN
+        elif left_down(e) or right_up(e):  # 왼쪽으로 RUN
             boy.dir, boy.action = -1, 0
 
     @staticmethod
@@ -157,3 +164,34 @@ class Run:
     @staticmethod
     def draw(boy):
         boy.image.clip_draw(boy.frame * 100, boy.action * 100, 100, 100, boy.x, boy.y)
+
+
+class AutoRun:
+    @staticmethod
+    def enter(boy, e):
+        random_direction = random.choice([-1, 1])
+        boy.dir, boy.action = random_direction, 1 if random_direction == 1 else 0  # 1이면 오른쪽, 아니면 왼쪽
+        boy.start_time = get_time()
+        print("AutoRun start")
+        pass
+
+    @staticmethod
+    def exit(boy, e):
+        print("AutoRun exit")
+        pass
+
+    @staticmethod
+    def do(boy):
+        boy.frame = (boy.frame + 1) % 8
+        boy.x += boy.dir * 10
+        if boy.x < 15:
+            boy.dir, boy.action = 1, 1
+        if boy.x > 785:
+            boy.dir, boy.action = -1, 0
+        if get_time() - boy.start_time > 5.0:
+            boy.state_machine.handle_event(('TIME_OUT_5', 0))
+        pass
+
+    @staticmethod
+    def draw(boy):
+        boy.image.clip_draw(boy.frame * 100, boy.action * 100, 100, 100, boy.x, boy.y + 20, 150, 150)
